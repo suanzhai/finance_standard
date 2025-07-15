@@ -226,7 +226,7 @@ class FinanceTermLoader:
         try:
             index_params = {
                 "metric_type": "COSINE",
-                "index_type": "IVF_FLAT",
+                "index_type": "AUTOINDEX",
                 "params": {"nlist": 128}
             }
             
@@ -335,6 +335,98 @@ class FinanceTermLoader:
             self.logger.error(f"加载金融术语失败: {e}")
             raise
 
+    def search_similar_terms(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        使用milvusClient（pymilvus）进行相似性搜索。
+        Args:
+            query: 用户输入的查询词
+            top_k: 返回最相近的结果数
+        Returns:
+            包含术语、类别和相似度分数的字典列表
+        """
+        from pymilvus import MilvusClient
+        # 1. 生成查询词的embedding
+        embedding = self.embeddings.embed_query(query)
+        # 2. 初始化milvusClient
+        uri = self.db_path if os.getenv('MILVUS_USE_LITE', 'true').lower() == 'true' else f"{self.milvus_host}:{self.milvus_port}"
+        client = MilvusClient(uri=uri)
+        # 3. 查询
+        search_result = client.search(
+            collection_name=self.collection_name,
+            data=[embedding],
+            limit=top_k,
+            output_fields=["term", "category"],
+            search_params={"metric_type": "COSINE"}
+        )
+        # 4. 解析结果
+        output = []
+        for hit in search_result[0]:
+            output.append({
+                "term":  hit['entity'].get("term") or "",
+                "category":  hit['entity'].get("category") or "",
+                "score": hit.get("distance") or hit.get("score") or 0
+            })
+        return output
+
+    def init_milvus_data(self, csv_path: str = "data/万条金融标准术语.csv"):
+        """
+        初始化Milvus数据库并加载金融术语数据。
+        Args:
+            csv_path: 金融术语CSV文件路径，默认为 data/万条金融标准术语.csv
+        Returns:
+            统计信息字典
+        """
+        return self.load_finance_terms(csv_path)
+
+    def process_and_import(self, df, on_embed_progress=None, on_insert_progress=None):
+        """
+        处理DataFrame，分批生成嵌入并分批插入Milvus，支持进度回调。
+        Args:
+            df: 金融术语DataFrame，需包含'term'和'category'列
+            on_embed_progress: 嵌入进度回调，参数(done, total)
+            on_insert_progress: 插入进度回调，参数(done, total)
+        Returns:
+            统计信息字典
+        """
+        texts = df['term'].tolist()
+        batch_size = self.batch_size
+        embeddings = []
+        total = len(texts)
+        for i in range(0, total, batch_size):
+            batch_texts = texts[i:i + batch_size]
+            batch_embeddings = self.embeddings.embed_documents(batch_texts)
+            embeddings.extend(batch_embeddings)
+            if on_embed_progress:
+                on_embed_progress(i + len(batch_texts), total)
+        # 连接Milvus
+        self.connect_milvus()
+        collection = self.create_collection()
+        # 插入数据
+        insert_batch_size = int(os.getenv('INSERT_BATCH_SIZE', '1000'))
+        total_records = len(df)
+        inserted_count = 0
+        for batch_idx in range(0, total_records, insert_batch_size):
+            start_idx = batch_idx
+            end_idx = min(start_idx + insert_batch_size, total_records)
+            batch_data = [
+                df['term'].iloc[start_idx:end_idx].tolist(),
+                df['category'].iloc[start_idx:end_idx].tolist(),
+                embeddings[start_idx:end_idx]
+            ]
+            collection.insert(batch_data)
+            inserted_count = end_idx
+            if on_insert_progress:
+                on_insert_progress(inserted_count, total_records)
+        collection.flush()
+        self.create_index(collection)
+        collection.load()
+        return {
+            "total_terms": len(df),
+            "collection_name": self.collection_name,
+            "embedding_model": self.embedding_model,
+            "embedding_dim": self.embedding_dim
+        }
+
 
 # 使用示例
 if __name__ == "__main__":
@@ -350,8 +442,7 @@ if __name__ == "__main__":
         loader = FinanceTermLoader()
         
         # 加载金融术语
-        csv_path = "data/万条金融标准术语.csv"
-        result = loader.load_finance_terms(csv_path)
+        result = loader.init_milvus_data()
         
         print(f"加载完成！统计信息: {result}")
         
