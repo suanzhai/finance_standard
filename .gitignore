@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# VSCode/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# MacOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+.env.*
+config.env
+config.env.example
+
+# Data/DB
+*.db
+*.sqlite3
+*.sqlite
+db/
+
+# Test/coverage
+htmlcov/
+.coverage*
+.pytest_cache/
+tests/htmlcov/
+tests/.coverage*
+
+# Logs
+*.log
+
+# Misc
+*.bak
+*.tmp
+*.orig
+
+# Ignore data samples (optional)
+data/*.csv
+!data/万条金融标准术语.csv 

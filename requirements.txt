@@ -1,0 +1,22 @@
+pandas>=2.0.0
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-community>=0.1.0
+pymilvus>=2.3.0
+milvus>=2.3.0
+tqdm>=4.64.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+
+# 测试依赖
+pytest>=7.0.0
+pytest-mock>=3.10.0
+
+# 可选依赖 - 用于支持更多嵌入模型提供商
+# HuggingFace支持
+sentence-transformers>=2.2.0
+torch>=1.13.0
+
+# 其他提供商支持（按需安装）
+# langchain-cohere>=0.1.0  # Cohere支持
+# langchain-anthropic>=0.1.0  # Anthropic支持 
